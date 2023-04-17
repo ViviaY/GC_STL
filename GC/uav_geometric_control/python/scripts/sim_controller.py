@@ -114,6 +114,92 @@ class UAV(object):
         self.command = np.insert(M,0,f)
         return X_dot
 
+
+    def dydt_yt(self, t, X):
+        R = np.reshape(X[6:15],(3,3));  # rotation from body to inertial
+        W = X[15:];   # angular rate
+        x = X[:3];  # position
+        v = X[3:6];    # velocity
+
+        xd = np.array([0, 0, 0])
+        xd_dot = np.array([0, 0, 0])
+        xd_ddot = np.array([0, 0, 0])
+        xd_dddot = np.array([0, 0, 0])
+        xd_ddddot = np.array([0, 0, 0])
+        b1d = np.array([1., 0., 0.])
+        b1d_dot=np.array([0., 0., 0.])
+        b1d_ddot=np.array([0., 0., 0.])
+        Rd = np.eye(3)
+        Wd = np.array([0.,0.,0.])
+        Wd_dot = np.array([0.,0.,0.])
+        f = np.array([0,0,0])
+        M = np.array([0,0,0])
+
+        
+
+        if t < 4:
+            xd_dot = np.array([1.+ 0.5*t, 0.2*np.sin(2*np.pi*t), -0.1])
+            b1d = np.array([1., 0.,0.])
+            d_in = (xd, xd_dot, xd_ddot, xd_dddot, xd_ddddot,
+                    b1d, b1d_dot, b1d_ddot, Rd, Wd, Wd_dot)
+            (f, M) = self.velocity_control(t, R, W, x, v, d_in) 
+        elif t < 6:
+            xd = np.array([8.,0.,0.])
+            ang_d=2.*np.pi*(t-4)
+            ang_d_dot=2.*np.pi
+            Rd = np.array([[np.cos(ang_d), 0., np.sin(ang_d)],[0.,1.,0.],
+                [-np.sin(ang_d), 0., np.cos(ang_d)]])
+            Rd_dot = np.array([[-ang_d_dot*np.sin(ang_d), 0.,
+                ang_d_dot*np.cos(ang_d)],[0.,0.,0.],
+                [-ang_d_dot*np.cos(ang_d), 0., -ang_d_dot*np.sin(ang_d)]])
+            Wdhat=Rd.T.dot(Rd_dot)
+            Wd=np.array([-Wdhat[1,2],Wdhat[0,2],-Wdhat[0,1]])
+            b1d = Rd[:,0]
+            b1d_dot = Rd_dot[:,0]
+            d_in = (xd, xd_dot, xd_ddot, xd_dddot, xd_ddddot,
+                    b1d, b1d_dot, b1d_ddot, Rd, Wd, Wd_dot)
+            (f, M) = self.attitude_control(t, R, W, x, v, d_in) 
+        elif t < 8:
+            xd = np.array([14. - t, 0, 0])
+            xd_dot = np.array([-1 , 0, 0])
+            b1d = np.array([1., 0,0])
+            d_in = (xd, xd_dot, xd_ddot, xd_dddot, xd_ddddot,
+                    b1d, b1d_dot, b1d_ddot, Rd, Wd, Wd_dot)
+            (f, M) = self.position_control(t, R, W, x, v, d_in) 
+        elif t < 9:
+            xd = np.array([6.,0.,0.])
+            ang_d=2.*np.pi*(t-8)
+            ang_d_dot=2.*np.pi
+            Rd = np.array([[1.,0.,0.],[0, np.cos(ang_d), -np.sin(ang_d)],
+                [0,np.sin(ang_d), np.cos(ang_d)]])
+            Rd_dot = np.array([[0,0,0],[0,-ang_d_dot*np.sin(ang_d),
+                -ang_d_dot*np.cos(ang_d)],
+                [0,ang_d_dot*np.cos(ang_d), -ang_d_dot*np.sin(ang_d)]])
+            Wdhat=Rd.T.dot(Rd_dot)
+            Wd=np.array([-Wdhat[1,2],Wdhat[0,2],-Wdhat[0,1]])
+            b1d = Rd[:,0]
+            b1d_dot = Rd_dot[:,0]
+            d_in = (xd, xd_dot, xd_ddot, xd_dddot, xd_ddddot,
+                    b1d, b1d_dot, b1d_ddot, Rd, Wd, Wd_dot)
+            (f, M) = self.attitude_control(t, R, W, x, v, d_in)
+        elif t < 12:
+            xd = np.array([20. - 5./3*t, 0, 0])
+            xd_dot = np.array([-5./3 , 0, 0])
+            b1d = np.array([0., 1.,0.])
+            d_in = (xd, xd_dot, xd_ddot, xd_dddot, xd_ddddot,
+                    b1d, b1d_dot, b1d_ddot, Rd, Wd, Wd_dot)
+            (f, M) = self.position_control(t, R, W, x, v, d_in)
+
+        R_dot = np.dot(R,hat(W))
+        W_dot = np.dot(la.inv(self.J), M - np.cross(W, np.dot(self.J, W)))
+        x_dot = v
+        v_dot = self.g*self.e3 - f*R.dot(self.e3)/self.m
+        X_dot = np.concatenate((x_dot, v_dot, R_dot.flatten(), W_dot))
+        self.xd = xd
+        self.xd_dot = xd_dot
+        self.command = np.insert(M,0,f)
+        return X_dot
+
     def position_control(self, t, R, W, x, v, d_in):
         (xd, xd_dot, xd_2dot, xd_3dot, xd_4dot, b1d, b1d_dot, b1d_ddot, Rd, Wd, Wd_dot) = d_in
         (ex, ev) = position_errors( x, xd, v, xd_dot)
@@ -237,7 +323,7 @@ if __name__ == "__main__":
     J = np.diag([0.0820, 0.0845, 0.1377])
     e3 = np.array([0.,0.,1.])
     uav_t = UAV(J, e3)
-    t_max = 4 #12
+    t_max = 12 #12
     N = 100*t_max + 1
     t = np.linspace(0,t_max,N)
     xd = np.array([0.,0.,0.])
