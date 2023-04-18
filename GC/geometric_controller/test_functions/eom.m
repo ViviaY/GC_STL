@@ -1,4 +1,4 @@
-function Xdot = eom(t, X, k, param)
+function Xdot = eom(t, X, k, param, des_traj)
 
 e3 = [0, 0, 1]';
 m = param.m;
@@ -6,7 +6,7 @@ J = param.J;
 
 [~, v, R, W, ~, ~] = split_to_states(X);
 
-desired = command(t);
+desired = command_interpolate(t, des_traj);
 [f, M, ei_dot, eI_dot, ~, ~] = position_control(X, desired, k, param);
 
 xdot = v;
